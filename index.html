@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meteo Globale & Orario</title>
+    
+    <style>
+        :root {
+            --sky-top: #4facfe;
+            --sky-bottom: #00f2fe;
+            --sun-color: #ffd700;
+            --cloud-color: #ffffff;
+            --hill-back: #2ecc71;
+            --hill-front: #27ae60;
+            --tree-leaf: #218c74;
+            --tree-trunk: #5d4037;
+            --text-color: #333;
+            --card-bg: rgba(255, 255, 255, 0.65);
+            --saturation: 100%;
+            --scroll-thumb: rgba(0,0,0,0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #333;
+        }
+
+        .viewport {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--sky-top), var(--sky-bottom));
+            overflow: hidden;
+            transition: background 1s ease, filter 1s ease;
+            filter: saturate(var(--saturation));
+        }
+
+        .sun {
+            position: absolute;
+            top: 5%;
+            right: 5%;
+            width: 80px;
+            height: 80px;
+            background: var(--sun-color);
+            border-radius: 50%;
+            box-shadow: 0 0 40px var(--sun-color);
+            transition: top 1s, opacity 1s;
+            animation: pulse 4s infinite alternate;
+        }
+
+        .moon {
+            position: absolute;
+            top: -150px;
+            right: 10%;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            box-shadow: -15px 15px 0 #f1c40f;
+            transition: top 1s;
+        }
+
+        .clouds {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+        
+        .cloud {
+            position: absolute;
+            background: var(--cloud-color);
+            border-radius: 50px;
+            opacity: 0.9;
+        }
+        .cloud:after, .cloud:before { content: ''; position: absolute; background: inherit; border-radius: 50%; }
+
+        .c1 { width: 100px; height: 40px; top: 10%; left: -100px; animation: drift 30s linear infinite; }
+        .c1:after { width: 50px; height: 50px; top: -25px; left: 15px; } 
+        .c1:before { width: 40px; height: 40px; top: -15px; left: 45px; }
+
+        .c2 { width: 140px; height: 50px; top: 20%; left: -140px; animation: drift 45s linear infinite 5s; }
+        .c2:after { width: 70px; height: 70px; top: -35px; left: 20px; }
+        .c2:before { width: 60px; height: 60px; top: -25px; left: 60px; }
+
+        .precipitation { position: absolute; width: 100%; height: 100%; display: none; z-index: 5; pointer-events: none; }
+        .rain i { position: absolute; background: rgba(255,255,255,0.6); width: 2px; height: 20px; animation: rainFall 0.7s linear infinite; }
+        .snow i { position: absolute; background: white; width: 6px; height: 6px; border-radius: 50%; animation: snowFall 3s linear infinite; }
+
+        .landscape { position: absolute; bottom: 0; width: 100%; height: 45%; }
+        .hill { position: absolute; border-radius: 100% 100% 0 0; transition: background 1s; }
+        .bg-hill { width: 120%; height: 60%; bottom: 0; left: -10%; background: var(--hill-back); z-index: 1; }
+        .fg-hill { width: 120%; height: 40%; bottom: -20px; right: -10%; background: var(--hill-front); z-index: 2; }
+
+        .tree { position: absolute; bottom: 30%; z-index: 3; }
+        .tree::after { content: ''; position: absolute; width: 8px; height: 20px; background: var(--tree-trunk); bottom: -20px; left: 50%; transform: translateX(-50%); }
+        .tree-foliage { width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 60px solid var(--tree-leaf); animation: sway 3s ease-in-out infinite alternate; transition: border-bottom-color 1s; }
+        
+        .t1 { left: 15%; animation-delay: 0s; }
+        .t2 { right: 20%; transform: scale(1.2); animation-delay: 1s; }
+
+        .weather-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 800px;
+            background: var(--card-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            padding: 2rem;
+            border-radius: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            z-index: 10;
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: all 0.3s;
+        }
+
+        .search-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        select, button {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.1);
+            background: rgba(255,255,255,0.8);
+            font-size: 1rem;
+            cursor: pointer;
+            outline: none;
+        }
+        
+        #countrySelect { flex: 2; min-width: 140px; }
+        #citySelect { flex: 2; min-width: 140px; }
+        #seasonSelect { flex: 1; min-width: 200px; background: rgba(255,255,255,0.9); font-weight: bold; border-color: rgba(0,0,0,0.2); }
+        button { flex: 0.5; background: #333; color: white; border: none; font-weight: bold; min-width: 80px; transition: 0.3s;}
+        
+        button:hover { background: #555; }
+        button:disabled { background: #999; cursor: not-allowed; }
+
+        .weather-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 25px;
+            align-items: center;
+        }
+
+        .current-weather {
+            text-align: center;
+            padding-right: 20px;
+            border-right: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .current-weather h1 { font-size: 4.5rem; margin: 0; line-height: 1; }
+        .current-weather h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 5px; }
+        .current-weather .time-display { font-size: 1.2rem; font-family: 'Courier New', monospace; font-weight: bold; margin-bottom: 10px; color: #555; }
+        .current-weather .desc { font-style: italic; margin-bottom: 10px; text-transform: capitalize; }
+        .current-weather .meta { display: flex; justify-content: center; gap: 15px; font-size: 0.9rem; opacity: 0.8; }
+
+        .forecast-container {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 15px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--scroll-thumb) transparent;
+        }
+        
+        .forecast-container::-webkit-scrollbar { height: 8px; }
+        .forecast-container::-webkit-scrollbar-track { background: transparent; }
+        .forecast-container::-webkit-scrollbar-thumb { 
+            background: var(--scroll-thumb); 
+            border-radius: 4px; 
+        }
+
+        .forecast-item {
+            background: rgba(255,255,255,0.4);
+            padding: 12px;
+            border-radius: 15px;
+            min-width: 90px;
+            text-align: center;
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .forecast-item .day { font-weight: bold; margin-bottom: 5px; }
+        .forecast-item .icon { font-size: 1.8rem; margin: 5px 0; }
+        .forecast-item .max { font-weight: bold; }
+        .forecast-item .min { opacity: 0.7; }
+
+        @media (max-width: 650px) {
+            .weather-grid { grid-template-columns: 1fr; }
+            .current-weather { border-right: none; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 20px; padding-right: 0; }
+            .search-bar { flex-direction: column; }
+        }
+
+        .viewport.is-night {
+            --sky-top: #0f2027; --sky-bottom: #203a43;
+            --hill-back: #1a2a30; --hill-front: #142328;
+            --tree-leaf: #0d3830; --tree-trunk: #2c211e;
+            --card-bg: rgba(30, 30, 30, 0.75); --text-color: #eee;
+            --scroll-thumb: rgba(255, 255, 255, 0.5); 
+        }
+        .viewport.is-night .sun { top: 150%; } 
+        .viewport.is-night .moon { top: 10%; }
+        .viewport.is-night .cloud { background: #555; }
+        .viewport.is-night .forecast-item { background: rgba(255,255,255,0.1); }
+        .viewport.is-night select { background: #444; color: white; border-color: #666; }
+        .viewport.is-night .time-display { color: #bbb; }
+
+        .viewport.is-rainy { --sky-top: #373b44; --sky-bottom: #4286f4; --sun-color: #aaa; }
+        .viewport.is-rainy .clouds { opacity: 1; }
+        .viewport.is-rainy .sun { opacity: 0.3; box-shadow: none; }
+
+        .viewport.is-snowy {
+            --sky-top: #83a4d4; --sky-bottom: #b6fbff;
+            --hill-back: #e0e0e0; --hill-front: #f2f2f2; --tree-leaf: #ddeedd;
+            --saturation: 50%;
+        }
+        .viewport.is-snowy .clouds { opacity: 0.8; }
+        
+        .viewport.season-spring { }
+        .viewport.season-summer {
+            --sun-color: #ffaa00;
+            --sky-top: #2980b9; 
+            --sky-bottom: #6dd5fa;
+            --saturation: 110%;
+        }
+        .viewport.season-autumn { 
+            --hill-back: #cd6133; 
+            --hill-front: #d35400; 
+            --tree-leaf: #e67e22; 
+        }
+        .viewport.season-winter:not(.is-snowy) { 
+            --hill-back: #7f8c8d; 
+            --hill-front: #95a5a6; 
+            --tree-leaf: #556061; 
+            --saturation: 70%; 
+        }
+
+        @keyframes drift { from { transform: translateX(0); } to { transform: translateX(100vw); } }
+        @keyframes sway { 0% { transform: rotate(-2deg); } 100% { transform: rotate(2deg); } }
+        @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.1); } }
+        @keyframes rainFall { 0% { transform: translateY(0); } 100% { transform: translateY(100vh); } }
+        @keyframes snowFall { 0% { transform: translateY(0) translateX(0); } 100% { transform: translateY(100vh) translateX(20px); } }
+        
+    </style>
+</head>
+<body>
+
+    <div class="viewport" id="scene">
+        <div class="sun"></div>
+        <div class="moon"></div>
+        <div class="clouds"><div class="cloud c1"></div><div class="cloud c2"></div></div>
+        <div class="precipitation" id="precipitation-layer"></div>
+        <div class="landscape">
+            <div class="hill bg-hill"></div>
+            <div class="hill fg-hill"></div>
+            <div class="tree t1"><div class="tree-foliage"></div></div>
+            <div class="tree t2"><div class="tree-foliage"></div></div>
+        </div>
+
+        <div class="weather-overlay">
+            <div class="search-bar">
+                <select id="countrySelect" onchange="populateCities()">
+                    <option value="" disabled selected>Caricamento nazioni...</option>
+                </select>
+                <select id="citySelect">
+                    <option value="" disabled selected>Prima scegli Nazione</option>
+                </select>
+                <select id="seasonSelect" onchange="forceUpdateScene()">
+                    <option value="auto" selected>Stagione: Auto</option>
+                    <option value="spring">🌱 Primavera</option>
+                    <option value="summer">☀️ Estate</option>
+                    <option value="autumn">🍂 Autunno</option>
+                    <option value="winter">❄️ Inverno</option>
+                </select>
+                <button id="searchBtn" onclick="getWeather()">Vedi Meteo</button>
+            </div>
+
+            <div class="weather-grid">
+                <div class="current-weather">
+                    <h2 id="locationName">--</h2>
+                    <div class="time-display" id="localTime">--:--</div>
+                    <h1 id="temperature">--°C</h1>
+                    <p class="desc" id="description">Scegli una località</p>
+                    <div class="meta">
+                        <span>💨 <span id="windSpeed">--</span> km/h</span>
+                    </div>
+                </div>
+
+                <div class="forecast-container" id="forecastList">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collegamento al file JS esterno -->
+    <script src="meteoAPI.js"></script>
+
+</body>
+</html>
