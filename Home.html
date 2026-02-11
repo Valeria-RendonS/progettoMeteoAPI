@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Meteo Game - Open-Meteo</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-day:    linear-gradient(135deg, #1e3c72, #2a5298, #00c6ff);
+      --bg-night:  linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      --card-bg:   rgba(20, 30, 60, 0.28);
+      --neon:      rgba(0, 255, 255, 0.7);
+      --neon-red:  rgba(255, 80, 120, 0.8);
+      --text:      #f0f8ff;
+      --hot:       linear-gradient(135deg, #ff7e5f, #feb47b);
+      --cold:      linear-gradient(135deg, #56ccf2, #2f80ed);
+      --snow:      rgba(255,255,255,0.8);
+      --rain:      rgba(0,150,255,0.6);
+    }
+ 
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+ 
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--bg-day);
+      background-size: 200% 200%;
+      animation: gradientFlow 18s ease infinite;
+      overflow-x: hidden;
+      position: relative;
+    }
+ 
+    @keyframes gradientFlow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+ 
+    body.night {
+      background: var(--bg-night);
+    }
+ 
+    body.hot {
+      background: var(--hot);
+    }
+ 
+    body.cold {
+      background: var(--cold);
+    }
+ 
+    /* Effetto neve/pioggia di fondo */
+    .snow-bg, .rain-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      overflow: hidden;
+    }
+ 
+    .snow-bg::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="1" fill="%23fff"/></svg>') repeat;
+      animation: snowFall 10s linear infinite;
+      opacity: 0.6;
+    }
+ 
+    @keyframes snowFall {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+ 
+    .rain-bg::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(transparent, var(--rain));
+      animation: rainFall 1.5s linear infinite;
+      opacity: 0.7;
+    }
+ 
+    @keyframes rainFall {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+ 
+    /* Particelle */
+    .particles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 20% 30%, rgba(0,255,255,0.08) 0%, transparent 40%),
+                  radial-gradient(circle at 80% 70%, rgba(255,100,180,0.06) 0%, transparent 50%);
+      z-index: -1;
+      animation: particleDrift 60s linear infinite;
+    }
+ 
+    @keyframes particleDrift {
+      0% { transform: translate(0,0); }
+      100% { transform: translate(-8%, -5%); }
+    }
+ 
+    header {
+      padding: 1.2rem 1.5rem;
+      background: rgba(10, 15, 40, 0.45);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      border-bottom: 1px solid rgba(0,255,255,0.18);
+    }
+ 
+    .days-scroll {
+      display: flex;
+      gap: 1.1rem;
+      overflow-x: auto;
+      padding: 0.6rem 0;
+      scrollbar-width: none;
+      scroll-behavior: smooth;
+      margin-top: 2rem; /* Spazio sopra il titolo */
+    }
+    .days-scroll::-webkit-scrollbar { display: none; }
+ 
+    .day-card {
+      flex: 0 0 110px;
+      height: 138px;
+      background: var(--card-bg);
+      border-radius: 1.4rem;
+      backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(0,255,255,0.22);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.35s cubic-bezier(0.23,1,0.32,1);
+      position: relative;
+      overflow: hidden;
+    }
+ 
+    .day-card::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(45deg, transparent, var(--neon), transparent);
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+ 
+    .day-card:hover::before,
+    .day-card.active::before {
+      opacity: 0.6;
+    }
+ 
+    .day-card:hover,
+    .day-card.active {
+      transform: translateY(-14px) scale(1.09);
+      border-color: var(--neon);
+      box-shadow: 0 20px 50px rgba(0,200,255,0.4);
+    }
+ 
+    .day-name   { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
+    .day-icon   { font-size: 2.8rem; margin: 6px 0; filter: drop-shadow(0 4px 10px rgba(0,255,255,0.5)); }
+    .day-temp   { font-size: 2.1rem; font-weight: 800; }
+ 
+    main {
+      padding: 2rem 1.5rem;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+ 
+    .city {
+      font-size: 3.4rem;
+      font-weight: 800;
+      text-align: center;
+      margin: 1.5rem 0 0.5rem;
+      text-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 20px var(--neon);
+      letter-spacing: -1px;
+    }
+ 
+    .date {
+      font-size: 1.4rem;
+      text-align: center;
+      opacity: 0.9;
+      margin-bottom: 2.5rem;
+    }
+ 
+    .hero {
+      text-align: center;
+      margin: 2rem 0 4rem;
+      transform: scale(0.95);
+      opacity: 0;
+      transition: all 0.8s cubic-bezier(0.23,1,0.32,1);
+    }
+ 
+    .hero.visible {
+      transform: scale(1);
+      opacity: 1;
+    }
+ 
+    .huge {
+      font-size: 8rem;
+      margin-bottom: 1.2rem;
+      filter: drop-shadow(0 10px 30px rgba(0,0,0,0.7));
+    }
+ 
+    .big-temp {
+      font-size: 9.5rem;
+      font-weight: 900;
+      line-height: 0.85;
+      text-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 0 30px var(--neon);
+      position: relative;
+    }
+ 
+    .big-temp.hot-anim::after {
+      content: '🔥';
+      position: absolute;
+      top: -20px;
+      right: -30px;
+      font-size: 4rem;
+      animation: flame 1.5s ease-in-out infinite;
+    }
+ 
+    @keyframes flame {
+      0%, 100% { transform: scale(1) rotate(0); opacity: 1; }
+      50% { transform: scale(1.2) rotate(5deg); opacity: 0.8; }
+    }
+ 
+    .condition {
+      font-size: 2.6rem;
+      font-weight: 600;
+      margin: 1.5rem 0 2rem;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+ 
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Più grandi */
+      gap: 1.8rem;
+    }
+ 
+    .detail-card {
+      background: var(--card-bg);
+      border-radius: 1.8rem;
+      padding: 2.5rem 2rem;
+      backdrop-filter: blur(16px);
+      border: 1.5px solid rgba(0,255,255,0.25);
+      transition: all 0.4s ease;
+      text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      cursor: pointer;
+    }
+ 
+    .detail-card:hover {
+      transform: translateY(-10px);
+      border-color: var(--neon);
+      box-shadow: 0 25px 60px rgba(0,220,255,0.35);
+    }
+ 
+    .detail-card i {
+      font-size: 3.8rem;
+      margin-bottom: 1.2rem;
+      color: var(--neon);
+      filter: drop-shadow(0 4px 12px rgba(0,255,255,0.6));
+    }
+ 
+    .label {
+      font-size: 1.3rem;
+      opacity: 0.8;
+      margin-bottom: 0.8rem;
+    }
+ 
+    .value {
+      font-size: 2.8rem;
+      font-weight: 800;
+    }
+ 
+    /* Alba/Tramonto speciale */
+    .sun-card {
+      position: relative;
+    }
+ 
+    .sun-icon {
+      font-size: 3.8rem;
+      transition: transform 0.6s ease;
+    }
+ 
+    .sun-card:hover .sun-icon {
+      transform: translateY(20px) rotate(180deg); /* Animazione tramonto */
+    }
+ 
+    /* Modal per ingrandimento */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+ 
+    .modal.active {
+      display: flex;
+      opacity: 1;
+    }
+ 
+    .modal-content {
+      background: var(--card-bg);
+      border-radius: 2rem;
+      padding: 3rem;
+      max-width: 80%;
+      text-align: center;
+      transform: scale(0.8);
+      transition: transform 0.4s;
+      border: 2px solid var(--neon);
+    }
+ 
+    .modal.active .modal-content {
+      transform: scale(1);
+    }
+ 
+    .extra-data {
+      margin-top: 1.5rem;
+      font-size: 1.6rem;
+      color: var(--neon-red);
+    }
+ 
+    /* Grafici */
+    .chart-container {
+      height: 220px;
+      margin-top: 1rem;
+    }
+ 
+    @media (max-width: 768px) {
+      .big-temp { font-size: 7rem; }
+      .huge     { font-size: 6rem; }
+      .city     { font-size: 2.6rem; }
+      .day-card { flex: 0 0 100px; height: 124px; }
+      .day-icon { font-size: 2.4rem; }
+      .day-temp { font-size: 1.9rem; }
+      .details-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+ 
+<div class="particles"></div>
+<div id="weatherBg" class="snow-bg" style="display:none;"></div>
+<div id="rainBg" class="rain-bg" style="display:none;"></div>
+ 
+<header>
+  <div class="days-scroll" id="daysScroll"></div>
+</header>
+ 
+<main>
+  <div class="city" id="cityName">Milano</div>
+  <div class="date" id="currentDate"></div>
+ 
+  <div class="hero" id="heroSection">
+    <div class="huge" id="mainIcon"></div>
+    <div class="big-temp" id="mainTemp">--°</div>
+    <div class="condition" id="mainCondition">Caricamento...</div>
+  </div>
+ 
+  <div class="details-grid" id="detailsGrid"></div>
+</main>
+ 
+<div class="modal" id="modal">
+  <div class="modal-content" id="modalContent"></div>
+</div>
+ 
+<script>
+const LAT = 45.4642;
+const LON = 9.1900;
+const TZ  = "Europe/Rome";
+ 
+const WMO_TO_ICON = {
+  0:   { icon: "sun",               text: "Sereno",             day: true  },
+  1:   { icon: "sun",               text: "Preval. sereno",     day: true  },
+  2:   { icon: "cloud-sun",         text: "Parzialm. nuvoloso", day: true  },
+  3:   { icon: "cloud",             text: "Nuvoloso",           day: true  },
+  45:  { icon: "smog",              text: "Nebbia",             day: false },
+  48:  { icon: "smog",              text: "Nebbia fitta",       day: false },
+  51:  { icon: "cloud-drizzle",     text: "Pioggia leggera",    day: false },
+  53:  { icon: "cloud-rain",        text: "Pioggia moderata",   day: false },
+  61:  { icon: "cloud-showers-heavy", text: "Pioggia",        day: false },
+  63:  { icon: "cloud-showers-heavy", text: "Pioggia forte",  day: false },
+  71:  { icon: "snowflake",         text: "Nevicate",           day: false },
+  80:  { icon: "cloud-showers-heavy", text: "Rovesci",        day: false },
+  95:  { icon: "bolt",              text: "Temporale",          day: false },
+};
+ 
+async function fetchWeather() {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`
+            + `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m`
+            + `&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max`
+            + `&hourly=temperature_2m,precipitation`  // Aggiunto per grafici
+            + `&forecast_days=16&timezone=${TZ}`;
+ 
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API error");
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    document.getElementById("mainCondition").textContent = "Errore caricamento";
+    return null;
+  }
+}
+ 
+function getDayInfo(code) {
+  return WMO_TO_ICON[code] || { icon: "cloud", text: "?", day: true };
+}
+ 
+function formatDayName(dateStr, index) {
+  if (index === 0) return "Oggi";
+  if (index === 1) return "Domani";
+  return new Date(dateStr).toLocaleDateString("it-IT", {
+    weekday: "short", day: "numeric", month: "short"
+  });
+}
+ 
+function createDayCard(dayData, index, current) {
+  const card = document.createElement("div");
+  card.className = "day-card";
+  if (index === 0) card.classList.add("active");
+ 
+  const maxT = Math.round(dayData.temperature_2m_max);
+  const { icon } = getDayInfo(dayData.weather_code);
+ 
+  card.innerHTML = `
+    <div class="day-name">${formatDayName(dayData.time, index)}</div>
+    <div class="day-icon"><i class="fas fa-${icon}"></i></div>
+    <div class="day-temp">${maxT}°</div>
+  `;
+ 
+  card.addEventListener("click", () => {
+    document.querySelectorAll(".day-card").forEach(c => c.classList.remove("active"));
+    card.classList.add("active");
+    updateMainView(dayData, index === 0 ? current : null);
+    document.getElementById("heroSection").classList.remove("visible");
+    setTimeout(() => document.getElementById("heroSection").classList.add("visible"), 100);
+  });
+ 
+  return card;
+}
+ 
+function formatTime(str) {
+  return str ? new Date(str).toLocaleTimeString("it-IT", {hour:"2-digit", minute:"2-digit"}) : "—";
+}
+ 
+function showModal(label, value, extra) {
+  const modal = document.getElementById("modal");
+  const content = document.getElementById("modalContent");
+  content.innerHTML = `
+    <div class="label">${label}</div>
+    <div class="value">${value}</div>
+    <div class="extra-data">${extra}</div>
+  `;
+  modal.classList.add("active");
+  modal.onclick = () => modal.classList.remove("active");
+}
+ 
+function updateMainView(day, current = null, hourly = null) {
+  const isToday = !!current;
+  let temp, cond, iconName, isDay = true;
+ 
+  if (isToday) {
+    temp = Math.round(current.temperature_2m);
+    const info = getDayInfo(current.weather_code);
+    iconName = info.icon;
+    cond = info.text;
+    isDay = info.day;
+  } else {
+    const avg = (day.temperature_2m_max + day.temperature_2m_min) / 2;
+    temp = Math.round(avg);
+    const info = getDayInfo(day.weather_code);
+    iconName = info.icon;
+    cond = `${info.text} • max ${Math.round(day.temperature_2m_max)}°`;
+    isDay = info.day;
+  }
+ 
+  document.getElementById("mainIcon").innerHTML = `<i class="fas fa-${iconName}"></i>`;
+  document.getElementById("mainTemp").textContent = `${temp}°`;
+  document.getElementById("mainCondition").textContent = cond;
+ 
+  const tempElem = document.getElementById("mainTemp");
+  tempElem.classList.toggle("hot-anim", temp > 25);
+ 
+  document.body.classList.toggle("night", !isDay);
+  document.body.classList.toggle("hot", temp > 25);
+  document.body.classList.toggle("cold", temp < 5);
+ 
+  document.getElementById("snowBg").style.display = (day.weather_code === 71) ? "block" : "none";
+  document.getElementById("rainBg").style.display = (day.precipitation_sum > 0) ? "block" : "none";
+ 
+  const grid = document.getElementById("detailsGrid");
+  grid.innerHTML = "";
+ 
+  const details = [];
+ 
+  if (isToday && current) {
+    details.push(
+      { icon: "thermometer-half", label: "Percepita", value: Math.round(current.apparent_temperature) + "°", extra: "Sensazione termica basata su umidità e vento." },
+      { icon: "wind",             label: "Vento",     value: Math.round(current.wind_speed_10m) + " km/h", extra: "Direzione prevalente: N/A (aggiungi API se vuoi)." },
+      { icon: "tint",             label: "Umidità",   value: current.relative_humidity_2m + "%", extra: "Livello di umidità relativa." },
+    );
+  }
+ 
+  details.push(
+    { icon: "temperature-low",  label: "Min",       value: Math.round(day.temperature_2m_min) + "°", extra: "Temperatura minima prevista." },
+    { icon: "temperature-high", label: "Max",       value: Math.round(day.temperature_2m_max) + "°", extra: "Temperatura massima prevista." },
+    { icon: "cloud-rain",       label: "Pioggia",   value: (day.precipitation_sum || 0) + " mm", extra: "Precipitazioni totali." },
+  );
+ 
+  if (day.uv_index_max) {
+    details.push({ icon: "sun", label: "UV max", value: Math.round(day.uv_index_max), extra: "Indice UV massimo." });
+  }
+ 
+  // Alba/Tramonto in singola card
+  details.push({
+    icon: "sun", label: "Alba/Tramonto", value: `${formatTime(day.sunrise)} / ${formatTime(day.sunset)}`,
+    extra: "Durata giornata: ~${Math.round((new Date(day.sunset) - new Date(day.sunrise)) / (1000*60*60))} ore.",
+    class: "sun-card", iconClass: "sun-icon"
+  });
+ 
+  // Aggiungi grafico temp hourly se isToday
+  if (isToday && hourly) {
+    const chartCard = document.createElement("div");
+    chartCard.className = "detail-card";
+    chartCard.innerHTML = `
+      <i class="fas fa-chart-line"></i>
+      <div class="label">Temp Hourly</div>
+      <div class="chart-container"><canvas id="tempChart"></canvas></div>
+    `;
+    grid.appendChild(chartCard);
+ 
+    const ctx = document.getElementById("tempChart").getContext("2d");
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: hourly.time.slice(0,24).map(t => new Date(t).getHours() + ":00"),
+        datasets: [{ label: "Temp °C", data: hourly.temperature_2m.slice(0,24), borderColor: "rgba(0,255,255,0.8)", fill: false }]
+      },
+      options: { scales: { y: { beginAtZero: false } }, plugins: { legend: { display: false } } }
+    });
+ 
+    chartCard.onclick = () => showModal("Temp Hourly", "Grafico 24h", "Dati dettagliati hourly (estendi se vuoi).");
+  }
+ 
+  // Precipitazioni grafico
+  if (hourly && day.precipitation_sum > 0) {
+    const precipCard = document.createElement("div");
+    precipCard.className = "detail-card";
+    precipCard.innerHTML = `
+      <i class="fas fa-cloud-rain"></i>
+      <div class="label">Precipitazioni Hourly</div>
+      <div class="chart-container"><canvas id="precipChart"></canvas></div>
+    `;
+    grid.appendChild(precipCard);
+ 
+    const pctx = document.getElementById("precipChart").getContext("2d");
+    new Chart(pctx, {
+      type: "bar",
+      data: {
+        labels: hourly.time.slice(0,24).map(t => new Date(t).getHours() + ":00"),
+        datasets: [{ label: "Pioggia mm", data: hourly.precipitation.slice(0,24), backgroundColor: "rgba(0,150,255,0.6)" }]
+      },
+      options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+    });
+ 
+    precipCard.onclick = () => showModal("Precipitazioni", "Grafico 24h", "Probabilità pioggia per ora.");
+  }
+ 
+  details.forEach(d => {
+    const el = document.createElement("div");
+    el.className = `detail-card ${d.class || ""}`;
+    el.innerHTML = `
+      <i class="fas fa-${d.icon} ${d.iconClass || ""}"></i>
+      <div class="label">${d.label}</div>
+      <div class="value">${d.value}</div>
+    `;
+    el.onclick = () => showModal(d.label, d.value, d.extra);
+    grid.appendChild(el);
+  });
+}
+ 
+async function init() {
+  const data = await fetchWeather();
+  if (!data) return;
+ 
+  const scroll = document.getElementById("daysScroll");
+  const { daily, current, hourly } = data;
+ 
+  daily.time.forEach((time, i) => {
+    const dayObj = {
+      time,
+      weather_code: daily.weather_code[i],
+      temperature_2m_max: daily.temperature_2m_max[i],
+      temperature_2m_min: daily.temperature_2m_min[i],
+      sunrise: daily.sunrise[i],
+      sunset: daily.sunset[i],
+      precipitation_sum: daily.precipitation_sum[i],
+      uv_index_max: daily.uv_index_max?.[i]
+    };
+    scroll.appendChild(createDayCard(dayObj, i, current));
+  });
+ 
+  document.getElementById("currentDate").textContent =
+    new Date().toLocaleDateString("it-IT", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+ 
+  updateMainView(null, current, hourly);
+  document.getElementById("heroSection").classList.add("visible");
+ 
+  document.getElementById("cityName").textContent = "Milano";
+}
+ 
+init();
+</script>
+</body>
+</html>
+ 
