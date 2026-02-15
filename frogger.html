@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meteo Frogger</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border: 4px solid #fff;
+            border-radius: 4px;
+        }
+
+        canvas {
+            display: block;
+            background-color: #88aa88; /* Colore base erba */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #score-board {
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+        }
+        
+        #level-display {
+            font-size: 14px;
+            color: #ffd700;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        #weather-icon {
+            font-size: 30px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            pointer-events: all;
+        }
+
+        h1 { margin: 0 0 20px 0; font-size: 40px; color: #2ecc71; text-shadow: 2px 2px 0 #000; }
+        p { margin-bottom: 30px; }
+        
+        button.start-btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            background: #2ecc71;
+            color: white;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        button.start-btn:hover { background: #27ae60; }
+        
+        .btn-back {
+            margin-top: 10px;
+            background: #e74c3c;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+
+        /* Testing Controls */
+        #debug-controls {
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 480px;
+        }
+
+        .debug-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #555;
+            background: #444;
+            color: white;
+            border-radius: 3px;
+        }
+        .debug-btn:hover { background: #666; }
+        .debug-group { display: flex; gap: 5px; margin: 0 5px; }
+
+        /* --- NUOVI EFFETTI METEO MIGLIORATI --- */
+        #weather-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Pioggia: Gocce allungate azzurrine e veloci */
+        .rain {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><rect x="9" y="0" width="2" height="12" rx="1" fill="rgba(174, 194, 255, 0.6)"/></svg>');
+            background-size: 30px 30px; /* Densità */
+            animation: rainAnim 0.4s linear infinite;
+            opacity: 0.8;
+        }
+
+        /* Neve: Fiocchi rotondi bianchi, lenti e visibili */
+        .snow {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3" fill="rgba(255, 255, 255, 0.9)"/></svg>');
+            background-size: 40px 40px; /* Fiocchi più grandi e sparsi */
+            animation: snowAnim 3s linear infinite;
+        }
+
+        @keyframes rainAnim { 
+            from { background-position: 0 0; } 
+            to { background-position: 5px 60px; } /* Scende veloce leggermente inclinata */
+        }
+
+        @keyframes snowAnim { 
+            0% { background-position: 0 0; } 
+            100% { background-position: 10px 100px; } /* Scende lenta con leggero drift */
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="game-container">
+            <canvas id="gameCanvas" width="480" height="520"></canvas>
+            <div id="weather-overlay"></div>
+            
+            <div id="ui-layer">
+                <div>
+                    <div id="score-board">Punti: 0</div>
+                    <div id="level-display">Velocità: 1x</div>
+                </div>
+                <div id="weather-icon">☀️</div>
+            </div>
+
+            <div id="overlay">
+                <h1>METEO FROGGER</h1>
+                <p id="weather-status">Caricamento meteo...</p>
+                <button class="start-btn" onclick="startGame()">Start Game</button>
+                <br>
+                <a href="index.html" class="btn-back">Torna al Meteo</a>
+            </div>
+        </div>
+
+        <!-- Pannello di Controllo per Testing -->
+        <div id="debug-controls">
+            <div class="debug-group">
+                <span>Stagione:</span>
+                <button class="debug-btn" onclick="setDebugSeason('spring')">🌱 Prim</button>
+                <button class="debug-btn" onclick="setDebugSeason('summer')">🏖️ Est</button>
+                <button class="debug-btn" onclick="setDebugSeason('autumn')">🍂 Aut</button>
+                <button class="debug-btn" onclick="setDebugSeason('winter')">❄️ Inv</button>
+            </div>
+            <div class="debug-group">
+                <span>Meteo:</span>
+                <button class="debug-btn" onclick="setDebugWeather('clear')">☀️</button>
+                <button class="debug-btn" onclick="setDebugWeather('rainy')">🌧️</button>
+                <button class="debug-btn" onclick="setDebugWeather('snowy')">🌨️</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const weatherOverlay = document.getElementById('weather-overlay');
+
+        // Configurazione Grid
+        const grid = 40;
+        const rows = 13;
+        const cols = 12;
+
+        // Stato Gioco
+        let score = 0;
+        let gameSpeedMultiplier = 1.0;
+        const maxSpeedMultiplier = 10.0;
+        let animationId;
+        let isGameOver = true;
+        
+        // Palette Aggiornate
+        const palettes = {
+            spring: { 
+                grass: '#2ecc71', // Verde
+                water: '#3498db', 
+                frog: '#006400', 
+                safe: '#27ae60' 
+            },
+            summer: { 
+                grass: '#f4e9a5', // Giallo Sabbia
+                water: '#1abc9c', // Acqua turchese
+                frog: '#2e7d32', 
+                safe: '#deb887'   // Sabbia bagnata/scura
+            },
+            autumn: { 
+                grass: '#d35400', // Arancione scuro
+                water: '#5d4037', 
+                frog: '#2c3e50', 
+                safe: '#a04000'   // Marrone
+            },
+            winter: { 
+                grass: '#95a5a6', // Grigio Azzurro (Scurito per far vedere la neve bianca)
+                water: '#34495e', // Acqua scura fredda
+                frog: '#16a085', 
+                safe: '#7f8c8d'   // Grigio
+            },
+            night:  { 
+                grass: '#003300', 
+                water: '#000033', 
+                frog: '#00ff00', 
+                safe: '#002200' 
+            }
+        };
+
+        let currentPalette = palettes.spring;
+        let weatherData = { season: 'spring', type: 'clear', isDay: 1 };
+
+        // Entità
+        const startX = 6 * grid;
+        const startY = 12 * grid;
+        const frog = { x: startX, y: startY, width: 30, height: 30 };
+        
+        let cars = [];
+        let logs = [];
+
+        // --- 1. Gestione Dati Meteo ---
+        function loadWeather() {
+            const savedData = localStorage.getItem('froggerWeather');
+            if (savedData) {
+                weatherData = JSON.parse(savedData);
+                applyWeatherTheme();
+            } else {
+                document.getElementById('weather-status').innerText = "Meteo Standard (Primavera)";
+                applyWeatherTheme(); // Applica default
+            }
+        }
+
+        // Funzioni di Debug
+        function setDebugSeason(s) {
+            weatherData.season = s;
+            applyWeatherTheme();
+        }
+        function setDebugWeather(t) {
+            weatherData.type = t;
+            applyWeatherTheme();
+        }
+
+        function applyWeatherTheme() {
+            // Reset visivo
+            weatherOverlay.className = '';
+            document.getElementById('weather-icon').innerText = '☀️';
+
+            let statusText = `Stagione: ${translateSeason(weatherData.season)}`;
+            
+            // 1. Applica Palette Stagione
+            if (palettes[weatherData.season]) {
+                currentPalette = palettes[weatherData.season];
+            }
+
+            // 2. Override Notturno (se non stiamo forzando stagioni per test)
+            if (weatherData.isDay === 0) {
+                statusText += " (Notte)";
+            }
+
+            // 3. Effetti Meteo
+            if (weatherData.type === 'rainy' || weatherData.type === 'stormy') {
+                weatherOverlay.classList.add('rain');
+                statusText += " - Piove";
+                document.getElementById('weather-icon').innerText = '🌧️';
+            } else if (weatherData.type === 'snowy') {
+                weatherOverlay.classList.add('snow');
+                currentPalette = palettes.winter; // La neve forza il tema invernale
+                statusText += " - Nevica";
+                document.getElementById('weather-icon').innerText = '❄️';
+            }
+
+            document.getElementById('weather-status').innerText = statusText;
+            
+            // Ridisegna subito per vedere i cambi anche se in game over
+            if(isGameOver) draw(); 
+        }
+
+        function translateSeason(s) {
+            const map = { spring: 'Primavera', summer: 'Estate', autumn: 'Autunno', winter: 'Inverno' };
+            return map[s] || s;
+        }
+
+        // --- 2. Logica di Gioco ---
+
+        function initGame() {
+            score = 0;
+            gameSpeedMultiplier = 1.0;
+            frog.x = startX;
+            frog.y = startY;
+            isGameOver = false;
+            updateUI();
+            
+            cars = [];
+            logs = [];
+            
+            // Inizializza oggetti con velocità base
+            // Corsie Auto
+            for(let i=0; i<3; i++) { 
+                cars.push({ x: i * 220, y: 11 * grid, baseSpeed: 1.5, color: '#e74c3c', width: grid });
+                cars.push({ x: i * 260 + 50, y: 10 * grid, baseSpeed: -2, color: '#f39c12', width: grid });
+                cars.push({ x: i * 240 + 20, y: 9 * grid, baseSpeed: 2, color: '#8e44ad', width: grid });
+                cars.push({ x: i * 320, y: 8 * grid, baseSpeed: -2.5, color: '#ecf0f1', width: grid * 2 });
+            }
+
+            // Corsie Fiume
+            for(let i=0; i<3; i++) {
+                logs.push({ x: i * 250, y: 6 * grid, baseSpeed: 1.5, width: grid * 3 }); 
+                logs.push({ x: i * 220 + 30, y: 5 * grid, baseSpeed: -1.5, width: grid * 2.5 }); 
+                logs.push({ x: i * 300, y: 4 * grid, baseSpeed: 2, width: grid * 3.5 }); 
+                logs.push({ x: i * 240 + 50, y: 3 * grid, baseSpeed: -2, width: grid * 2.5 });
+                logs.push({ x: i * 280, y: 2 * grid, baseSpeed: 2.5, width: grid * 3 });
+            }
+        }
+
+        function startGame() {
+            initGame();
+            overlay.style.display = 'none';
+            animate();
+        }
+
+        function gameOver() {
+            if(isGameOver) return;
+            isGameOver = true;
+            cancelAnimationFrame(animationId);
+            document.querySelector('#overlay h1').innerText = "GAME OVER";
+            document.querySelector('#overlay button').innerText = "Riprova";
+            overlay.style.display = 'flex';
+        }
+
+        function winLevel() {
+            score += 100;
+            frog.x = startX;
+            frog.y = startY;
+            
+            // Aumenta velocità fino al limite
+            if (gameSpeedMultiplier < maxSpeedMultiplier) {
+                gameSpeedMultiplier += 0.1; // +10% della velocità base
+                // Arrotonda per pulizia
+                gameSpeedMultiplier = Math.round(gameSpeedMultiplier * 10) / 10;
+            }
+            
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('score-board').innerText = `Punti: ${score}`;
+            document.getElementById('level-display').innerText = `Velocità: ${gameSpeedMultiplier.toFixed(1)}x`;
+        }
+
+        function update() {
+            // 1. Muovi Auto (Moltiplicatore applicato)
+            cars.forEach(car => {
+                car.x += car.baseSpeed * gameSpeedMultiplier;
+                if(car.baseSpeed > 0 && car.x > canvas.width) car.x = -car.width;
+                if(car.baseSpeed < 0 && car.x < -car.width) car.x = canvas.width;
+            });
+
+            // 2. Muovi Tronchi (Moltiplicatore applicato)
+            logs.forEach(log => {
+                log.x += log.baseSpeed * gameSpeedMultiplier;
+                if(log.baseSpeed > 0 && log.x > canvas.width) log.x = -log.width;
+                if(log.baseSpeed < 0 && log.x < -log.width) log.x = canvas.width;
+            });
+
+            // 3. Collisioni
+            const frogRow = Math.floor(frog.y / grid);
+
+            if (frogRow < 2) {
+                winLevel();
+                return;
+            }
+
+            // Fiume
+            if (frogRow >= 2 && frogRow <= 6) {
+                let onLog = false;
+                for (let log of logs) {
+                    if (Math.abs(log.y - frog.y) < 10) { 
+                        if (rectIntersect(frog, log)) {
+                            onLog = true;
+                            // La rana si muove con la velocità corrente del tronco
+                            frog.x += log.baseSpeed * gameSpeedMultiplier; 
+                            break; 
+                        }
+                    }
+                }
+                if (!onLog) { gameOver(); return; }
+            }
+
+            // Strada
+            if (frogRow >= 8 && frogRow <= 11) {
+                for (let car of cars) {
+                    if (Math.abs(car.y - frog.y) < 10) {
+                        if (rectIntersect(frog, car, 8)) {
+                            gameOver();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Limiti Schermo
+            if (frog.x < 0) frog.x = 0;
+            if (frog.x > canvas.width - grid) frog.x = canvas.width - grid;
+            if (frog.y > 12 * grid) frog.y = 12 * grid;
+        }
+
+        function rectIntersect(r1, r2, margin = 0) {
+            return !(
+                r2.x + margin > r1.x + r1.width - margin || 
+                r2.x + r2.width - margin < r1.x + margin || 
+                r2.y + margin > r1.y + r1.height - margin ||
+                r2.y + r2.height - margin < r1.y + margin
+            );
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Sfondo Acqua
+            ctx.fillStyle = currentPalette.water;
+            ctx.fillRect(0, 0, canvas.width, 7 * grid);
+
+            // Sfondo Terreno (Start e Safe Zones)
+            ctx.fillStyle = currentPalette.grass;
+            ctx.fillRect(0, 12 * grid, canvas.width, grid); // Start
+            ctx.fillRect(0, 7 * grid, canvas.width, grid);  // Middle Safe
+            
+            // Goal Area
+            ctx.fillStyle = currentPalette.safe;
+            ctx.fillRect(0, 0, canvas.width, 2 * grid);
+
+            // Strada
+            ctx.fillStyle = '#444';
+            ctx.fillRect(0, 8 * grid, canvas.width, 4 * grid);
+
+            // Tronchi
+            ctx.fillStyle = '#8d6e63'; 
+            logs.forEach(log => {
+                ctx.fillRect(log.x, log.y + 5, log.width, grid - 10);
+            });
+
+            // Auto
+            cars.forEach(car => {
+                ctx.fillStyle = car.color;
+                ctx.fillRect(car.x, car.y + 5, car.width, grid - 10);
+                // Dettagli
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(car.x + 5, car.y + 5, 10, grid - 10);
+                ctx.fillRect(car.x + car.width - 15, car.y + 5, 10, grid - 10);
+            });
+
+            // RANA
+            ctx.fillStyle = currentPalette.frog;
+            ctx.fillRect(frog.x + 5, frog.y + 5, grid - 10, grid - 10);
+            // Occhi
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(frog.x + 10, frog.y + 10, 4, 0, Math.PI * 2);
+            ctx.arc(frog.x + 30, frog.y + 10, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(frog.x + 10, frog.y + 10, 2, 0, Math.PI * 2);
+            ctx.arc(frog.x + 30, frog.y + 10, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function animate() {
+            if (isGameOver) return;
+            update();
+            draw();
+            animationId = requestAnimationFrame(animate);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if(isGameOver) return;
+            switch(e.key) {
+                case 'ArrowUp': frog.y -= grid; break;
+                case 'ArrowDown': frog.y += grid; break;
+                case 'ArrowLeft': frog.x -= grid; break;
+                case 'ArrowRight': frog.x += grid; break;
+            }
+        });
+
+        loadWeather();
+
+    </script>
+</body>
+</html>

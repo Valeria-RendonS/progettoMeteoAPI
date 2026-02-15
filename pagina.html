@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meteo Pro - Frog Edition</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <style>
+        :root {
+            --glass: rgba(255, 255, 255, 0.15);
+            --border: rgba(255, 255, 255, 0.25);
+            --accent: #ccff00;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+
+        body {
+            color: white;
+            background: #1e3c72;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background 1s ease;
+        }
+
+        #bg-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2;
+            transition: 1.5s;
+        }
+
+        /* --- PULSANTE FROGGER (EX RANA) --- */
+        .frog-btn {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            z-index: 999;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--accent);
+            padding: 15px 25px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            text-decoration: none;
+            color: white;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+            animation: floatFrog 4s ease-in-out infinite;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .frog-btn:hover {
+            transform: scale(1.1) rotate(0deg) !important;
+            background: var(--accent);
+            color: #000;
+            animation-play-state: paused;
+        }
+
+        .frog-icon {
+            font-size: 3rem;
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.2));
+        }
+
+        .frog-text {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .frog-text span:first-child {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            opacity: 0.8;
+        }
+
+        .frog-text span:last-child {
+            font-size: 1.2rem;
+            font-weight: 900;
+        }
+
+        @keyframes floatFrog {
+            0%, 100% { transform: translateY(0) rotate(5deg); }
+            50% { transform: translateY(-25px) rotate(-5deg); }
+        }
+
+        /* --- NAV BAR --- */
+        .nav-top {
+            position: fixed;
+            top: 0; width: 100%; height: 90px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(15px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-scroll { display: flex; gap: 12px; padding: 10px; overflow-x: auto; scrollbar-width: none; }
+        .nav-card {
+            background: var(--glass);
+            padding: 10px 20px;
+            border-radius: 18px;
+            cursor: pointer;
+            text-align: center;
+            border: 1px solid transparent;
+            transition: 0.3s;
+        }
+        .nav-card.active { border-color: var(--accent); background: rgba(255,255,255,0.2); transform: translateY(-3px); }
+        .nav-card .temp-val { color: var(--accent); font-weight: bold; }
+
+        .back-btn {
+            position: fixed;
+            top: 105px; left: 20px;
+            z-index: 999;
+            background: var(--accent);
+            color: #000;
+            padding: 12px 25px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 800;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            transition: 0.3s;
+        }
+        .back-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+
+        .container { max-width: 1000px; margin: 180px auto 50px; padding: 0 20px; }
+
+        .hero-glass {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            border-radius: 35px;
+            padding: 40px;
+            border: 1px solid var(--border);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .celestial-box { font-size: 5rem; margin-bottom: 15px; position: relative; height: 100px; }
+        .celestial { position: absolute; left: 50%; transform: translateX(-50%); transition: 1s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .hide { opacity: 0; top: 50px; }
+        .show { opacity: 1; top: 0; }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 25px;
+            border-radius: 25px;
+            border: 1px solid var(--border);
+            text-align: left;
+            position: relative;
+            overflow: hidden;
+            transition: 0.3s;
+        }
+        .panel:hover { background: rgba(0, 0, 0, 0.4); transform: translateY(-5px); }
+        .panel i { font-size: 2rem; color: var(--accent); margin-bottom: 15px; display: block; }
+        .panel h3 { font-size: 0.9rem; text-transform: uppercase; opacity: 0.6; margin-bottom: 5px; }
+        .panel p { font-size: 1.8rem; font-weight: 700; }
+
+        .chart-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 30px;
+            padding: 30px;
+            height: 350px;
+        }
+
+        @media (max-width: 600px) { .container { margin-top: 220px; } }
+    </style>
+</head>
+<body>
+
+    <div id="bg-layer"></div>
+
+    <a href="frogger.html" class="frog-btn" id="frog">
+        <span class="frog-icon" id="frog-emoji">🐸</span>
+        <div class="frog-text">
+            <span>Mini Game</span>
+            <span>Gioca a Frogger</span>
+        </div>
+    </a>
+
+    <nav class="nav-top">
+        <div class="nav-scroll" id="dayNav"></div>
+    </nav>
+
+    <a href="index.html" class="back-btn">← TORNA</a>
+
+    <div class="container">
+        <div class="hero-glass">
+            <h1 id="cityTitle">--</h1>
+            <div class="celestial-box">
+                <i id="sun" class="fas fa-sun celestial show" style="color: #ffd700;"></i>
+                <i id="moon" class="fas fa-moon celestial hide" style="color: #f1f2f6;"></i>
+            </div>
+            <div style="font-size: 6rem; font-weight: 900;" id="mainTemp">--°</div>
+            <div style="font-size: 1.5rem; letter-spacing: 5px; color: var(--accent);" id="mainDesc">--</div>
+        </div>
+
+        <div class="details-grid">
+            <div class="panel">
+                <i class="fas fa-wind"></i>
+                <h3>Vento</h3>
+                <p id="windVal">14 km/h</p>
+            </div>
+            <div class="panel">
+                <i class="fas fa-droplet"></i>
+                <h3>Umidità</h3>
+                <p id="humVal">58%</p>
+            </div>
+            <div class="panel">
+                <i class="fas fa-eye"></i>
+                <h3>Visibilità</h3>
+                <p id="visVal">10 km</p>
+            </div>
+            <div class="panel">
+                <i class="fas fa-gauge-high"></i>
+                <h3>Pressione</h3>
+                <p id="pressVal">1012 hPa</p>
+            </div>
+        </div>
+
+        <div class="chart-box">
+            <canvas id="hourlyChart"></canvas>
+        </div>
+    </div>
+
+<script>
+    const selected = JSON.parse(localStorage.getItem("selectedDay")) || { city: "Roma", temp: 24, desc: "Soleggiato", day: "Lun" };
+    const week = [
+        { d: "Lun", t: 22, desc: "Soleggiato" }, { d: "Mar", t: 19, desc: "Parz. Nuvoloso" },
+        { d: "Mer", t: 14, desc: "Piovigginoso" }, { d: "Gio", t: 28, desc: "Molto Caldo" },
+        { d: "Ven", t: 31, desc: "Afa" }, { d: "Sab", t: 25, desc: "Variabile" },
+        { d: "Dom", t: 18, desc: "Temporale" }
+    ];
+
+    let chartInstance = null;
+
+    // Movimento rana modificato per gestire il nuovo pulsante
+    window.onscroll = () => {
+        const frog = document.getElementById('frog');
+        const scroll = window.scrollY;
+        // La rana si sposta meno invasivamente dato che ora è un pulsante UI
+        frog.style.transform = `translateY(${-scroll * 0.05}px)`;
+    };
+
+    function init() {
+        const nav = document.getElementById('dayNav');
+        week.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `nav-card ${item.d === selected.day ? 'active' : ''}`;
+            card.innerHTML = `<div>${item.d}</div><div class="temp-val">${item.t}°</div>`;
+            card.onclick = () => updateData(item);
+            nav.appendChild(card);
+        });
+        updateData({ d: selected.day, t: selected.temp, desc: selected.desc });
+    }
+
+    function updateData(item) {
+        document.querySelectorAll('.nav-card').forEach(c => c.classList.remove('active'));
+        
+        document.getElementById('cityTitle').textContent = selected.city;
+        document.getElementById('mainTemp').textContent = `${item.t}°`;
+        document.getElementById('mainDesc').textContent = item.desc;
+
+        const bg = document.getElementById('bg-layer');
+        if(item.t < 15) bg.style.background = "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)";
+        else if(item.t < 26) bg.style.background = "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)";
+        else bg.style.background = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)";
+
+        document.getElementById('windVal').textContent = (10 + Math.floor(Math.random()*15)) + " km/h";
+        document.getElementById('humVal').textContent = (40 + Math.floor(Math.random()*40)) + "%";
+
+        renderChart(item.t);
+    }
+
+    function renderChart(base) {
+        const ctx = document.getElementById('hourlyChart').getContext('2d');
+        const temps = [base-3, base-1, base+2, base+4, base+1, base-2];
+        
+        if(chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['04:00', '08:00', '12:00', '16:00', '20:00', '00:00'],
+                datasets: [{
+                    data: temps,
+                    borderColor: '#ccff00',
+                    borderWidth: 4,
+                    pointRadius: 6,
+                    pointBackgroundColor: '#fff',
+                    backgroundColor: 'rgba(204, 255, 0, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onHover: (e, el) => {
+                    const sun = document.getElementById('sun');
+                    const moon = document.getElementById('moon');
+                    const frogEmoji = document.getElementById('frog-emoji');
+                    
+                    if(el.length > 0 && el[0].index >= 4) {
+                        sun.className = "fas fa-sun celestial hide";
+                        moon.className = "fas fa-moon celestial show";
+                        frogEmoji.textContent = "😴";
+                    } else {
+                        sun.className = "fas fa-sun celestial show";
+                        moon.className = "fas fa-moon celestial hide";
+                        frogEmoji.textContent = "🐸";
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: true }
+                },
+                scales: {
+                    x: { ticks: { color: '#fff' }, grid: { display: false } },
+                    y: { display: false }
+                }
+            }
+        });
+    }
+
+    init();
+</script>
+</body>
+</html>
